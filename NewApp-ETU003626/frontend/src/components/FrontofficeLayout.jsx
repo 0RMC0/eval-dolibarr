@@ -5,6 +5,7 @@ const frontoffice = [
   { to: '/salaries', label: 'Salariés' },
   { to: '/salaires/nouveau', label: 'Créer / payer un salaire' },
   { to: '/salaires/lot', label: 'Générer des salaires (Lot)' },
+  { to: '/salaires/lot/day', label: 'Générer des salaires (Jour)' },
   { to: '/salaries/details', label: 'Détails & Historique' },
 ];
 

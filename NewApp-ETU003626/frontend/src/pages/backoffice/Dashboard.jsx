@@ -112,7 +112,7 @@ export default function Dashboard() {
                     size={180}
                     thickness={25}
                     withTooltip
-                    valueFormatter={(value) => `${value.toLocaleString('fr-FR')} €`}
+                    valueFormatter={(value) => `${value.toLocaleString('fr-FR')} MGA`}
                   />
                   <Group justify="center" gap="md" mt="sm">
                     {genderData.map((item) => (
@@ -145,7 +145,7 @@ export default function Dashboard() {
                 series={[{ name: 'montant', color: 'indigo.6', label: 'Montant total' }]}
                 tickLine="y"
                 gridAxis="xy"
-                valueFormatter={(value) => `${value.toLocaleString('fr-FR')} €`}
+                valueFormatter={(value) => `${value.toLocaleString('fr-FR')} MGA`}
               />
             )}
           </Card>

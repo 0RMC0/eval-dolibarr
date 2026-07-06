@@ -5,6 +5,7 @@ import CodeGate from './auth/CodeGate';
 
 import EmployeeList from './pages/frontoffice/EmployeeList';
 import SalaryCreate from './pages/frontoffice/SalaryCreate';
+import SalaryPerDayBatchCreate from './pages/frontoffice/SalaryPerDayBatchCreate';
 import SalaryBatchCreate from './pages/frontoffice/SalaryBatchCreate';
 import EmployeeDetailList from './pages/frontoffice/EmployeeDetailList';
 import EmployeeDetail from './pages/frontoffice/EmployeeDetail';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="salaries" element={<EmployeeList />} />
           <Route path="salaires/nouveau" element={<SalaryCreate />} />
           <Route path="salaires/lot" element={<SalaryBatchCreate />} />
+          <Route path="salaires/lot/day" element={<SalaryPerDayBatchCreate />} />
           <Route path="salaries/details" element={<EmployeeDetailList />} />
           <Route path="salaries/details/:id" element={<EmployeeDetail />} />
         </Route>

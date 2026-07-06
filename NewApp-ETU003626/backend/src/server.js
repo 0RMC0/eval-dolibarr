@@ -21,7 +21,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', requireBackofficeCode, authRoutes);
 app.use('/api/reset', requireBackofficeCode, resetRoutes);
 app.use('/api/import', requireBackofficeCode, importRoutes);
-app.use('/api/holidays', requireBackofficeCode, holidayRoutes);
+app.use('/api/holidays', holidayRoutes);
 
 // Gestion centralisée des erreurs
 // eslint-disable-next-line no-unused-vars
