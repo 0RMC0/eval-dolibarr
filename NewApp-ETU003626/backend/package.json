@@ -1,0 +1,22 @@
+{
+  "name": "newapp-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend NewApp — réinitialisation de données, import CSV/ZIP, SQLite (Dolibarr)",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "cors": "^2.8.5",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.1",
+    "mysql2": "^3.22.5",
+    "yauzl": "^3.2.0"
+  }
+}

@@ -1,0 +1,29 @@
+# --- Dépendances ---
+node_modules/
+
+# --- Secrets / environnement ---
+.env
+.env.*
+!.env.example
+
+# --- Build ---
+dist/
+dist-ssr/
+*.local
+
+# --- Dolibarr : sources & archives lourdes (exclus) ---
+dolibarr-23.0.3/
+dolibarr-23.0.3.zip
+scratch_dolibarr/
+
+# --- Archives de rendu (exclus) ---
+NewApp-ETU003626.zip
+
+# --- Outils / artefacts locaux ---
+.agent/
+.claude/
+
+# --- Divers ---
+*.log
+.DS_Store
+Thumbs.db

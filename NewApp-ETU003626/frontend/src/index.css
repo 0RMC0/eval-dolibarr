@@ -1,0 +1,10 @@
+/* Styles globaux minimaux — la mise en forme est gérée par Mantine. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
