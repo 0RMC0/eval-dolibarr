@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Alert, Button, Card, Center, PasswordInput, Stack, Title } from '@mantine/core';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 /**
  * Garde de route du backoffice. [J1 - 1.a]

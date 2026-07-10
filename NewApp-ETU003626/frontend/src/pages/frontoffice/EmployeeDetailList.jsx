@@ -1,62 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Title,
-  Text,
-  Table,
-  Badge,
-  Stack,
-  Card,
-  Alert,
-  Loader,
-  Center,
-  Button,
-} from '@mantine/core';
-import { listEmployees } from '../../services/employeeService';
+import { Badge, Button, Card, Stack, Table, Text, Title } from '@mantine/core';
+import { listRealEmployees } from '../../services/employeeService';
+import { useAsyncLoad } from '../../hooks/useAsyncLoad';
+import { LoadingScreen, PageError } from '../../components/PageStates';
 import EmployeeAvatar from '../../components/EmployeeAvatar';
 
+// [J2 - 2.b] Liste (sans filtre) donnant accès à la fiche détaillée de chaque salarié.
 export default function EmployeeDetailList() {
   const navigate = useNavigate();
   const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    async function loadEmployees() {
-      try {
-        setLoading(true);
-        setError(null);
-        const empData = await listEmployees();
-        const realEmployees = empData.filter((u) => u.ref_employee && u.employee === '1');
-        setEmployees(realEmployees);
-      } catch (err) {
-        console.error(err);
-        setError('Impossible de charger la liste des salariés depuis Dolibarr.');
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadEmployees();
-  }, []);
+  const { loading, error } = useAsyncLoad(async () => {
+    setEmployees(await listRealEmployees());
+  }, 'Impossible de charger la liste des salariés depuis Dolibarr.');
 
-  if (loading) {
-    return (
-      <Center style={{ height: '70vh' }}>
-        <Loader size="xl" />
-      </Center>
-    );
-  }
-
-  if (error) {
-    return (
-      <Stack p="md">
-        <Title order={2}>Historique des salariés</Title>
-        <Alert color="red" title="Erreur">
-          {error}
-        </Alert>
-      </Stack>
-    );
-  }
+  if (loading) return <LoadingScreen />;
+  if (error) return <PageError title="Historique des salariés">{error}</PageError>;
 
   return (
     <Stack gap="lg">
@@ -88,12 +48,7 @@ export default function EmployeeDetailList() {
               {employees.map((emp) => (
                 <Table.Tr key={emp.id}>
                   <Table.Td>
-                    <EmployeeAvatar
-                      userId={emp.id}
-                      photo={emp.photo}
-                      name={emp.lastname}
-                      size={36}
-                    />
+                    <EmployeeAvatar userId={emp.id} photo={emp.photo} name={emp.lastname} size={36} />
                   </Table.Td>
                   <Table.Td fw={600}>{emp.lastname}</Table.Td>
                   <Table.Td c="dimmed">@{emp.login}</Table.Td>

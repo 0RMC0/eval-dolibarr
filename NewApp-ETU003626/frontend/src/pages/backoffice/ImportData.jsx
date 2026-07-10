@@ -1,18 +1,10 @@
 import { useState } from 'react';
-import {
-  Alert,
-  Button,
-  Card,
-  FileInput,
-  Group,
-  List,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Alert, Button, Card, FileInput, Group, List, Stack, Text, Title } from '@mantine/core';
 import { importData } from '../../services/adminService';
+import { notifyError, notifySuccess } from '../../utils/notify';
 
+// [J1 - 1.c] Import des CSV employés/salaires et du ZIP de photos.
+// Chaque fichier est optionnel : on peut importer un par un ou tout ensemble.
 export default function ImportData() {
   const [employes, setEmployes] = useState(null);
   const [salaires, setSalaires] = useState(null);
@@ -20,17 +12,17 @@ export default function ImportData() {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
 
+  const hasFile = employes || salaires || images;
+
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setReport(null);
     try {
-      const result = await importData({ employes, salaires, images });
-      setReport(result);
-      notifications.show({ color: 'green', message: 'Import terminé.' });
+      setReport(await importData({ employes, salaires, images }));
+      notifySuccess('Import terminé.');
     } catch (err) {
-      const message = err.response?.data?.error || err.message;
-      notifications.show({ color: 'red', title: 'Échec de l’import', message });
+      notifyError('Échec de l’import', err);
     } finally {
       setLoading(false);
     }
@@ -72,7 +64,7 @@ export default function ImportData() {
               clearable
             />
             <Group justify="flex-end">
-              <Button type="submit" loading={loading} disabled={!employes && !salaires && !images}>
+              <Button type="submit" loading={loading} disabled={!hasFile}>
                 Lancer l’import
               </Button>
             </Group>
@@ -85,6 +77,7 @@ export default function ImportData() {
   );
 }
 
+/** Rapport d'import : compteurs + erreurs détaillées par section. */
 function ImportReport({ report }) {
   const sections = [
     { key: 'employes', label: 'Employés créés', ok: report.employes.crees, errs: report.employes.erreurs },

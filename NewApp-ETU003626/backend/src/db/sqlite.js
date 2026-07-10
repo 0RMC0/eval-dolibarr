@@ -4,8 +4,8 @@ import { dirname } from 'node:path';
 import { config } from '../config/index.js';
 
 /**
- * Connexion SQLite partagée.
- * Non utilisée par les fonctionnalités J1 — mise en place pour le J2.
+ * Connexion SQLite partagée (base locale de NewApp).
+ * Héberge la table `holidays` (jours fériés, J2) — le schéma est créé ici.
  */
 let db = null;
 

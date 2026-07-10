@@ -1,64 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Title, Grid, Card, Text, Center, Loader, Alert, Stack, Group, Table } from '@mantine/core';
+import { useState } from 'react';
+import { Card, Center, Grid, Group, Stack, Table, Text, Title } from '@mantine/core';
 import { DonutChart, BarChart } from '@mantine/charts';
-import { getSalaryByGender, getSalaryByMonth } from '../../services/dashboardService';
-import { notifications } from '@mantine/notifications';
+import { getDashboardData } from '../../services/dashboardService';
+import { formatAmount } from '../../utils/format';
+import { useAsyncLoad } from '../../hooks/useAsyncLoad';
+import { LoadingScreen, PageError } from '../../components/PageStates';
 
+const chartValueFormatter = (value) => `${value.toLocaleString('fr-FR')} MGA`;
+
+// [J1 - 1.d] Dashboard : masse salariale par genre et par mois.
 export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [genderData, setGenderData] = useState([]);
   const [monthData, setMonthData] = useState([]);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        setLoading(true);
-        setError(null);
-        const [gender, month] = await Promise.all([
-          getSalaryByGender(),
-          getSalaryByMonth(),
-        ]);
-        setGenderData(gender);
-        setMonthData(month);
-      } catch (err) {
-        console.error(err);
-        setError("Impossible de charger les données du tableau de bord depuis Dolibarr.");
-        notifications.show({
-          color: 'red',
-          title: 'Erreur de chargement',
-          message: err.message || 'Une erreur est survenue lors de la communication avec l\'API Dolibarr.',
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+  const { loading, error } = useAsyncLoad(async () => {
+    const { byGender, byMonth } = await getDashboardData();
+    setGenderData(byGender);
+    setMonthData(byMonth);
+  }, 'Impossible de charger les données du tableau de bord depuis Dolibarr.');
 
-  const formatCurrency = (val) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(val);
+  const total = genderData.reduce((acc, curr) => acc + curr.value, 0);
 
-  const totalSalaries = genderData.reduce((acc, curr) => acc + curr.value, 0);
-
-  if (loading) {
-    return (
-      <Center style={{ height: '70vh' }}>
-        <Loader size="xl" />
-      </Center>
-    );
-  }
-
-  if (error) {
-    return (
-      <Stack p="md">
-        <Title order={2}>Tableau de bord</Title>
-        <Alert color="red" title="Erreur">
-          {error}
-        </Alert>
-      </Stack>
-    );
-  }
+  if (loading) return <LoadingScreen />;
+  if (error) return <PageError title="Tableau de bord">{error}</PageError>;
 
   return (
     <Stack gap="lg">
@@ -69,116 +33,137 @@ export default function Dashboard() {
         </Text>
       </div>
 
+      {/* Indicateurs */}
       <Grid>
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <Card withBorder padding="lg" radius="md">
-            <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
-              Masse Salariale Totale
-            </Text>
-            <Text size="xl" fw={700} mt="xs">
-              {formatCurrency(totalSalaries)}
-            </Text>
-          </Card>
+          <StatCard label="Masse Salariale Totale" value={formatAmount(total)} />
         </Grid.Col>
-        
         {genderData.map((g) => (
           <Grid.Col span={{ base: 12, md: 4 }} key={g.name}>
-            <Card withBorder padding="lg" radius="md">
-              <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
-                Total {g.name}s
-              </Text>
-              <Text size="xl" fw={700} mt="xs" c={g.color}>
-                {formatCurrency(g.value)}
-              </Text>
-            </Card>
+            <StatCard label={`Total ${g.name}s`} value={formatAmount(g.value)} color={g.color} />
           </Grid.Col>
         ))}
       </Grid>
 
+      {/* Graphiques */}
       <Grid mt="md">
-        {/* Graphique Genre */}
         <Grid.Col span={{ base: 12, md: 6 }}>
-          <Card withBorder padding="lg" radius="md" style={{ height: '420px' }}>
-            <Title order={4} mb="lg">Masse salariale par genre</Title>
-            {genderData.length === 0 ? (
-              <Center style={{ height: '300px' }}>
-                <Text c="dimmed">Aucune donnée disponible</Text>
-              </Center>
-            ) : (
-              <Center style={{ height: '300px' }}>
-                <Stack align="center" gap="xs">
-                  <DonutChart
-                    data={genderData}
-                    size={180}
-                    thickness={25}
-                    withTooltip
-                    valueFormatter={(value) => `${value.toLocaleString('fr-FR')} MGA`}
-                  />
-                  <Group justify="center" gap="md" mt="sm">
-                    {genderData.map((item) => (
-                      <Group gap={6} key={item.name}>
-                        <Text size="xs" fw={500} c={item.color}>
-                          ● {item.name} : {((item.value / totalSalaries) * 100).toFixed(1)}% ({formatCurrency(item.value)})
-                        </Text>
-                      </Group>
-                    ))}
-                  </Group>
-                </Stack>
-              </Center>
-            )}
-          </Card>
+          <GenderDonutCard data={genderData} total={total} />
         </Grid.Col>
-
-        {/* Graphique Évolution par Mois */}
         <Grid.Col span={{ base: 12, md: 6 }}>
-          <Card withBorder padding="lg" radius="md" style={{ height: '420px' }}>
-            <Title order={4} mb="lg">Évolution des salaires par mois</Title>
-            {monthData.length === 0 ? (
-              <Center style={{ height: '300px' }}>
-                <Text c="dimmed">Aucune donnée disponible</Text>
-              </Center>
-            ) : (
-              <BarChart
-                h={300}
-                data={monthData}
-                dataKey="month"
-                series={[{ name: 'montant', color: 'indigo.6', label: 'Montant total' }]}
-                tickLine="y"
-                gridAxis="xy"
-                valueFormatter={(value) => `${value.toLocaleString('fr-FR')} MGA`}
-              />
-            )}
-          </Card>
+          <MonthBarCard data={monthData} />
         </Grid.Col>
       </Grid>
 
-      {/* Tableau détaillé des salaires par mois */}
-      <Card withBorder padding="lg" radius="md">
-        <Title order={4} mb="md">Détail des salaires par mois</Title>
-        {monthData.length === 0 ? (
-          <Text c="dimmed">Aucune donnée disponible</Text>
-        ) : (
-          <Table striped highlightOnHover verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Mois / Période</Table.Th>
-                <Table.Th style={{ textAlign: 'right' }}>Total des Salaires</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {monthData.map((row) => (
-                <Table.Tr key={row.month}>
-                  <Table.Td fw={500}>{row.month}</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }} fw={700}>
-                    {formatCurrency(row.montant)}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+      <MonthTableCard data={monthData} />
     </Stack>
   );
 }
 
+/** Carte indicateur simple : libellé + valeur. */
+function StatCard({ label, value, color }) {
+  return (
+    <Card withBorder padding="lg" radius="md">
+      <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
+        {label}
+      </Text>
+      <Text size="xl" fw={700} mt="xs" c={color}>
+        {value}
+      </Text>
+    </Card>
+  );
+}
+
+function NoData({ height = '300px' }) {
+  return (
+    <Center style={{ height }}>
+      <Text c="dimmed">Aucune donnée disponible</Text>
+    </Center>
+  );
+}
+
+/** [1.d.I] Donut de la masse salariale par genre + légende détaillée. */
+function GenderDonutCard({ data, total }) {
+  return (
+    <Card withBorder padding="lg" radius="md" style={{ height: '420px' }}>
+      <Title order={4} mb="lg">Masse salariale par genre</Title>
+      {data.length === 0 ? (
+        <NoData />
+      ) : (
+        <Center style={{ height: '300px' }}>
+          <Stack align="center" gap="xs">
+            <DonutChart
+              data={data}
+              size={180}
+              thickness={25}
+              withTooltip
+              valueFormatter={chartValueFormatter}
+            />
+            <Group justify="center" gap="md" mt="sm">
+              {data.map((item) => (
+                <Group gap={6} key={item.name}>
+                  <Text size="xs" fw={500} c={item.color}>
+                    ● {item.name} : {((item.value / total) * 100).toFixed(1)}% ({formatAmount(item.value)})
+                  </Text>
+                </Group>
+              ))}
+            </Group>
+          </Stack>
+        </Center>
+      )}
+    </Card>
+  );
+}
+
+/** [1.d.II] Histogramme de l'évolution des salaires par mois. */
+function MonthBarCard({ data }) {
+  return (
+    <Card withBorder padding="lg" radius="md" style={{ height: '420px' }}>
+      <Title order={4} mb="lg">Évolution des salaires par mois</Title>
+      {data.length === 0 ? (
+        <NoData />
+      ) : (
+        <BarChart
+          h={300}
+          data={data}
+          dataKey="month"
+          series={[{ name: 'montant', color: 'indigo.6', label: 'Montant total' }]}
+          tickLine="y"
+          gridAxis="xy"
+          valueFormatter={chartValueFormatter}
+        />
+      )}
+    </Card>
+  );
+}
+
+/** Tableau récapitulatif des totaux par mois. */
+function MonthTableCard({ data }) {
+  return (
+    <Card withBorder padding="lg" radius="md">
+      <Title order={4} mb="md">Détail des salaires par mois</Title>
+      {data.length === 0 ? (
+        <Text c="dimmed">Aucune donnée disponible</Text>
+      ) : (
+        <Table striped highlightOnHover verticalSpacing="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Mois / Période</Table.Th>
+              <Table.Th style={{ textAlign: 'right' }}>Total des Salaires</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {data.map((row) => (
+              <Table.Tr key={row.month}>
+                <Table.Td fw={500}>{row.month}</Table.Td>
+                <Table.Td style={{ textAlign: 'right' }} fw={700}>
+                  {formatAmount(row.montant)}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}

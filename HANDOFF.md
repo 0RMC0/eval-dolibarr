@@ -75,27 +75,40 @@ NewApp-ETU003626/
 │   ├── api/            dolibarr.js (client direct)  ·  backend.js (client + header code)
 │   ├── auth/           CodeGate.jsx (garde de route)  ·  backofficeCode.js (storage)
 │   ├── context/        AuthContext.jsx (useAuth)
-│   ├── components/     BackofficeLayout.jsx · FrontofficeLayout.jsx · EmployeeAvatar.jsx
-│   ├── services/       employeeService, salaryService, dashboardService, adminService,
-│   │                   authService, holidayService
-│   ├── utils/          format.js (montant FR/dates)  ·  payments.js (total payé / reste dû)
+│   ├── hooks/          useAsyncLoad.js (chargement + loading/error/reload)
+│   ├── components/     SideNavShell (coquille des 2 layouts) · BackofficeLayout ·
+│   │                   FrontofficeLayout · PageStates (LoadingScreen/PageError) ·
+│   │                   EmployeeAvatar · PaymentStatusBadge · ConfirmModal ·
+│   │                   EmployeeFilterCard · EmployeeSelectionTable · GenerationReportModal
+│   ├── services/       employeeService (listRealEmployees) · salaryService (payloads
+│   │                   Dolibarr : createPeriodSalary/addPayment) · dashboardService
+│   │                   (getDashboardData, 1 seul fetch) · adminService · authService ·
+│   │                   holidayService
+│   ├── utils/          format (montants) · dates (todayIso/isoToFr/toJsDate) ·
+│   │                   payments (paymentsForSalary/totalPaid/remainingDue/paymentStatus) ·
+│   │                   employeeFilters (uniqueJobs/filterEmployees) ·
+│   │                   salaryCalc (plan tarif journalier : jours fériés x2) · notify
 │   └── pages/
 │       ├── frontoffice/  EmployeeList, SalaryCreate, SalaryBatchCreate,
-│       │                 EmployeeDetailList, EmployeeDetail
+│       │                 SalaryPerDayBatchCreate, EmployeeDetailList, EmployeeDetail
 │       └── backoffice/   Dashboard, Holidays, ImportData, ResetData
 └── backend/src/
     ├── config/index.js         config centralisée (lit .env)
     ├── server.js               Express, CORS, routes protégées, middleware d'erreur
     ├── middleware/auth.js       vérifie header x-backoffice-code
-    ├── routes/                 auth, reset, import, holiday (minces → controllers)
+    ├── routes/                 auth, reset, import, holiday (GET libre, mutations protégées)
     ├── controllers/            reset, import, holiday
-    ├── services/               reset.service, import.service, dolibarr.service (client + fonctions métier)
-    ├── dao/                    reset.dao (MySQL+SQLite)  ·  employee.dao (stub)  ·  holiday.dao (SQLite)
-    ├── db/                     mysql.js (pool Dolibarr)  ·  sqlite.js (better-sqlite3 : table holidays)
+    ├── services/               reset.service, import.service (découpé en étapes),
+    │                           dolibarr.service (client + fonctions métier)
+    ├── dao/                    reset.dao (MySQL+SQLite)  ·  holiday.dao (SQLite)
+    ├── db/                     mysql.js (pool Dolibarr)  ·  sqlite.js (schéma holidays)
     └── utils/                  csv.js, payment-parser.js, date.js, zip.js
 ```
-> `salary.dao.js` a été **supprimé** (aucune donnée salaire en SQLite). La seule table
-> SQLite est `holidays` (J2).
+> `salary.dao.js` et `employee.dao.js` (stubs jamais importés) ont été **supprimés**.
+> La seule table SQLite est `holidays` (J2).
+> **Règles de code** : logique métier dans `utils/`/`services/` (fonctions pures, petites),
+> pages = composition ; le format des payloads Dolibarr vit UNIQUEMENT dans salaryService
+> (frontend) et dolibarr.service (backend).
 
 Flux backend : **route → controller → service → dao/dolibarr.service**. Erreurs centralisées.
 
@@ -175,6 +188,32 @@ Nom de fichier image = `ref_employe` (`1.png` → employé réf 1).
 
 ## 6bis. Dernières modifications (session en cours)
 
+- **Nouvelle page "Générer salaires (Jour + week-end)"** (`/salaires/lot/day-weekend`) :
+  copie de la génération au tarif journalier + cases **Samedi/Dimanche**. Jour
+  week-end coché = majoration **x3** (x6 si aussi férié : x3 puis x2). Non coché =
+  jour normal (x1). Logique isolée dans `utils/salaryCalcWeekend.js` (copie de
+  `salaryCalc.js`, calcul jour par jour), page
+  `pages/frontoffice/SalaryPerDayWeekendBatchCreate.jsx`. **Deux alternatives
+  prêtes à décommenter** dans `dayMultiplier` : (1) ne pas payer les week-ends non
+  cochés, (2) addition x3+x2=x5 au lieu de x6. Règle vérifiée sur tous les cas.
+
+- **Nouvelle page "Générer paiements"** (`/paiements/lot`, frontoffice) : paie les
+  salaires d'un mois/année donnés avec un budget, ordre strict = poste prioritaire
+  d'abord puis date de début croissante ; paiement partiel quand le budget s'épuise,
+  reliquat ignoré, salaires déjà soldés exclus. Logique pure dans
+  `frontend/src/utils/paymentPlan.js` (`unpaidSalariesForMonth` → `orderByPriority`
+  → `allocateBudget`), page `pages/frontoffice/PaymentBatchCreate.jsx` (mêmes
+  filtres qu'EmployeeFilterCard + aperçu en direct de l'ordre + rapport modal).
+  Logique vérifiée sur l'exemple du sujet (priorité Technicien, budget 250 → 80
+  total, 100 total, 70 partiel). Le champ mois/année est un input type="month"
+  (les Selects d'origine sont commentés dans la page).
+- **Nouvelle page "Résultat des paiements"** (`/paiements/resultat`, frontoffice) :
+  liste tous les paiements dans leur ordre d'exécution (date de paiement puis id
+  croissant = ordre de priorité de la génération), joints au salaire (date début)
+  et à l'employé (nom, poste), avec filtre optionnel par mois de paiement et
+  total payé. Page `pages/frontoffice/PaymentResultList.jsx`, lecture seule
+  (aucun nouveau service).
+
 - **Import fichier par fichier** : les 3 fichiers ne sont plus obligatoires ensemble. On peut
   importer employés / salaires / photos **indépendamment**. Pour rattacher des salaires ou
   photos importés seuls, `import.service.js` pré-charge les utilisateurs existants via
@@ -192,7 +231,25 @@ Nom de fichier image = `ref_employe` (`1.png` → employé réf 1).
     À confirmer avant de considérer le nettoyage fichiers comme pleinement fiable.
   - Limite : ne rattrape pas les **orphelins** d'anciens cycles. Vérifié dans les sources :
     `User::delete()` de Dolibarr ne supprime pas le dossier `documents/users/{id}` non plus.
-- **`salary.dao.js` supprimé** (aucune donnée salaire en SQLite).
+- **Simplification pour dév intermédiaire React** : patterns avancés retirés
+  (render props, refs/useCallback dans le hook, props-fonctions, config arrays JSX).
+  Le hook `useAsyncLoad` est en React "tutoriel". La doc de modification vit
+  dans **`NewApp-ETU003626/docs/`** (7 fichiers : syntaxe JS, syntaxe React,
+  Mantine, structure, recettes, patterns, backend — index dans docs/README.md).
+  **À lire avant de modifier le code, et à maintenir à jour.**
+  Lint : `npx eslint src` passe à **0 erreur** (ne pas réintroduire de
+  setState synchrone dans un effet ni d'export mixte composant+fonction).
+- **Refactorisation globale (KISS)** : duplications supprimées dans tout le code —
+  hook `useAsyncLoad`, composants partagés (PageStates, EmployeeFilterCard,
+  EmployeeSelectionTable, GenerationReportModal, ConfirmModal, PaymentStatusBadge,
+  SideNavShell), utils purs (dates, employeeFilters, salaryCalc, notify, payments),
+  payloads Dolibarr centralisés dans salaryService, dashboard en 1 seul fetch,
+  `import.service.js` backend découpé en étapes. Comportement inchangé.
+- **Sécurité holidays** : les mutations (POST/PUT/DELETE `/api/holidays`) exigent
+  désormais le code backoffice ; le GET reste libre (le frontoffice « tarif
+  journalier » lit les jours fériés).
+- **`salary.dao.js` supprimé** (aucune donnée salaire en SQLite) ; `employee.dao.js`
+  (stub mort) supprimé aussi.
 - **UI** : `Layout.jsx` scindé en `BackofficeLayout.jsx` + `FrontofficeLayout.jsx` ; ajout de
   `EmployeeAvatar.jsx`.
 - **Dossier renommé** : `NewApp` → `NewApp-ETU003626`.

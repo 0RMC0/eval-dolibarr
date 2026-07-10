@@ -15,11 +15,9 @@ import {
 /**
  * Import des 2 CSV + ZIP de photos vers Dolibarr. [J1 - 1.c]
  *
- * Étapes isolées et résilientes (une erreur sur une ligne n'annule pas le reste) :
- *  1. employés  -> POST /users            (map ref_employe -> userId)
- *  2. salaires  -> POST /salaries         (map ref_salaire -> salaryId)
- *  3. paiements -> POST /salaries/{id}/payments (paiement en plusieurs fois)
- *  4. photos    -> chaque image = photo de l'employé (par ref_employe)
+ * Chaque fichier est optionnel (import un par un possible) et chaque étape est
+ * résiliente : une erreur sur une ligne n'annule pas le reste, tout est
+ * consigné dans le rapport renvoyé au frontend.
  */
 export async function importData({ employesCsvPath, salairesCsvPath, imagesZipPath }) {
   const report = {
@@ -28,98 +26,115 @@ export async function importData({ employesCsvPath, salairesCsvPath, imagesZipPa
     paiements: { crees: 0, erreurs: [] },
     photos: { associees: 0, erreurs: [] },
   };
-  const userIdByRef = new Map(); // ref_employe -> id user Dolibarr
+
+  // ref_employe -> id user Dolibarr. Pré-rempli avec les employés déjà
+  // présents pour pouvoir importer salaires/photos séparément des employés.
+  const userIdByRef = await loadExistingUserRefs();
 
   try {
-    // Récupérer les utilisateurs existants dans Dolibarr pour pouvoir matcher les imports un par un
-    try {
-      const existingUsers = await dolibarr.get('/users?limit=1000') || [];
-      for (const u of existingUsers) {
-        if (u.ref_employee) {
-          userIdByRef.set(String(u.ref_employee), u.id);
-        }
-      }
-    } catch (err) {
-      console.error('Erreur lors du chargement des utilisateurs existants:', err);
-    }
-
-    // 1. Employés
     if (employesCsvPath) {
-      const employees = mapEmployees(readFileSync(employesCsvPath, 'utf8'));
-      for (const emp of employees) {
-        try {
-          let userId = userIdByRef.get(String(emp.ref));
-          if (!userId) {
-            userId = await createUser(emp);
-            userIdByRef.set(String(emp.ref), userId);
-            report.employes.crees++;
-          }
-        } catch (err) {
-          report.employes.erreurs.push({ ref: emp.ref, message: err.message });
-        }
-      }
+      await importEmployees(employesCsvPath, userIdByRef, report.employes);
     }
-
-    // 2. Salaires + 3. Paiements
     if (salairesCsvPath) {
-      const salaries = mapSalaries(readFileSync(salairesCsvPath, 'utf8'));
-      for (const sal of salaries) {
-        const userId = userIdByRef.get(String(sal.refEmploye));
-        if (!userId) {
-          report.salaires.erreurs.push({
-            ref: sal.ref,
-            message: `Employé réf. ${sal.refEmploye} introuvable (non importé).`,
-          });
-          continue;
-        }
-        let salaryId;
-        try {
-          salaryId = await createSalary(sal, userId);
-          report.salaires.crees++;
-        } catch (err) {
-          report.salaires.erreurs.push({ ref: sal.ref, message: err.message });
-          continue;
-        }
-        // Paiements (échelonnés)
-        for (const p of sal.paiements) {
-          try {
-            await addSalaryPayment(salaryId, { dateIso: frToIso(p.date), montant: p.montant });
-            report.paiements.crees++;
-          } catch (err) {
-            report.paiements.erreurs.push({ refSalaire: sal.ref, message: err.message });
-          }
-        }
-      }
+      await importSalaries(salairesCsvPath, userIdByRef, report);
     }
-
-    // 4. Photos (nom de fichier = ref_employe, ex. "1.png")
     if (imagesZipPath) {
-      const files = await extractZip(imagesZipPath);
-      for (const [name, buffer] of files) {
-        const ref = name.replace(/\.[^.]+$/, ''); // "1.png" -> "1"
-        const userId = userIdByRef.get(ref);
-        if (!userId) {
-          report.photos.erreurs.push({ fichier: name, message: `Aucun employé réf. ${ref}.` });
-          continue;
-        }
-        try {
-          await setUserPhoto(userId, name, buffer);
-          report.photos.associees++;
-        } catch (err) {
-          report.photos.erreurs.push({ fichier: name, message: err.message });
-        }
-      }
+      await importPhotos(imagesZipPath, userIdByRef, report.photos);
     }
   } finally {
-    // Nettoyage des fichiers temporaires uploadés
-    await Promise.all(
-      [employesCsvPath, salairesCsvPath, imagesZipPath]
-        .filter(Boolean)
-        .map((p) => unlink(p).catch(() => {}))
-    );
+    await removeTempFiles([employesCsvPath, salairesCsvPath, imagesZipPath]);
   }
 
   return report;
+}
+
+/** Map ref_employee -> id des utilisateurs déjà présents dans Dolibarr. */
+async function loadExistingUserRefs() {
+  const map = new Map();
+  try {
+    const users = (await dolibarr.get('/users?limit=1000')) || [];
+    for (const u of users) {
+      if (u.ref_employee) map.set(String(u.ref_employee), u.id);
+    }
+  } catch (err) {
+    console.error('Erreur lors du chargement des utilisateurs existants:', err);
+  }
+  return map;
+}
+
+/** Étape 1 : crée les employés du CSV (ignore ceux déjà présents). */
+async function importEmployees(csvPath, userIdByRef, result) {
+  for (const emp of mapEmployees(readFileSync(csvPath, 'utf8'))) {
+    if (userIdByRef.has(String(emp.ref))) continue; // déjà importé
+    try {
+      const userId = await createUser(emp);
+      userIdByRef.set(String(emp.ref), userId);
+      result.crees++;
+    } catch (err) {
+      result.erreurs.push({ ref: emp.ref, message: err.message });
+    }
+  }
+}
+
+/** Étapes 2 + 3 : crée les salaires puis leurs paiements échelonnés. */
+async function importSalaries(csvPath, userIdByRef, report) {
+  for (const sal of mapSalaries(readFileSync(csvPath, 'utf8'))) {
+    const userId = userIdByRef.get(String(sal.refEmploye));
+    if (!userId) {
+      report.salaires.erreurs.push({
+        ref: sal.ref,
+        message: `Employé réf. ${sal.refEmploye} introuvable (non importé).`,
+      });
+      continue;
+    }
+
+    let salaryId;
+    try {
+      salaryId = await createSalary(sal, userId);
+      report.salaires.crees++;
+    } catch (err) {
+      report.salaires.erreurs.push({ ref: sal.ref, message: err.message });
+      continue;
+    }
+
+    await importPayments(sal, salaryId, report.paiements);
+  }
+}
+
+/** Étape 3 : enregistre les paiements (partiels) d'un salaire. */
+async function importPayments(sal, salaryId, result) {
+  for (const p of sal.paiements) {
+    try {
+      await addSalaryPayment(salaryId, { dateIso: frToIso(p.date), montant: p.montant });
+      result.crees++;
+    } catch (err) {
+      result.erreurs.push({ refSalaire: sal.ref, message: err.message });
+    }
+  }
+}
+
+/** Étape 4 : associe chaque image du ZIP à son employé (nom = ref_employe). */
+async function importPhotos(zipPath, userIdByRef, result) {
+  const files = await extractZip(zipPath);
+  for (const [name, buffer] of files) {
+    const ref = name.replace(/\.[^.]+$/, ''); // "1.png" -> "1"
+    const userId = userIdByRef.get(ref);
+    if (!userId) {
+      result.erreurs.push({ fichier: name, message: `Aucun employé réf. ${ref}.` });
+      continue;
+    }
+    try {
+      await setUserPhoto(userId, name, buffer);
+      result.associees++;
+    } catch (err) {
+      result.erreurs.push({ fichier: name, message: err.message });
+    }
+  }
+}
+
+/** Supprime les fichiers temporaires uploadés (tolérant si déjà absents). */
+function removeTempFiles(paths) {
+  return Promise.all(paths.filter(Boolean).map((p) => unlink(p).catch(() => {})));
 }
 
 /** Transforme les lignes du CSV employés en objets normalisés. */

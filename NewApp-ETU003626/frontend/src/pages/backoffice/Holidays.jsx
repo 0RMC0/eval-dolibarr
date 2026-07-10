@@ -1,20 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
-  Title,
-  Text,
-  Table,
-  Button,
-  Modal,
-  TextInput,
-  Stack,
-  Group,
-  Card,
-  Center,
-  Loader,
   Alert,
-  ActionIcon,
+  Button,
+  Card,
+  Group,
+  Modal,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import {
   listHolidays,
   createHoliday,
@@ -22,130 +18,65 @@ import {
   deleteHoliday,
 } from '../../services/holidayService';
 import { formatDate } from '../../utils/format';
+import { notifyError, notifySuccess, notifyWarning } from '../../utils/notify';
+import { useAsyncLoad } from '../../hooks/useAsyncLoad';
+import { LoadingScreen } from '../../components/PageStates';
+import ConfirmModal from '../../components/ConfirmModal';
 
+// [J2 - 1.b] CRUD des jours fériés (stockés dans la base SQLite du backend).
 export default function Holidays() {
   const [holidays, setHolidays] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // Form / Modal State
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingHoliday, setEditingHoliday] = useState(null); // null for create, object for edit
-  const [date, setDate] = useState('');
-  const [label, setLabel] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Delete Confirm Modal State
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [holidayToDelete, setHolidayToDelete] = useState(null);
+  // null = fermé, {} = création, objet existant = modification.
+  const [editing, setEditing] = useState(null);
+  // Jour férié en attente de confirmation de suppression.
+  const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  const fetchHolidays = async () => {
+  const { loading, error, reload } = useAsyncLoad(async () => {
+    setHolidays(await listHolidays());
+  }, 'Impossible de charger les jours fériés.');
+
+  const handleSave = async ({ date, label }) => {
     try {
-      setLoading(true);
-      setError(null);
-      const data = await listHolidays();
-      setHolidays(data);
-    } catch (err) {
-      console.error(err);
-      setError('Impossible de charger les jours fériés.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHolidays();
-  }, []);
-
-  const handleOpenCreateModal = () => {
-    setEditingHoliday(null);
-    setDate('');
-    setLabel('');
-    setModalOpen(true);
-  };
-
-  const handleOpenEditModal = (holiday) => {
-    setEditingHoliday(holiday);
-    setDate(holiday.date);
-    setLabel(holiday.label);
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!date || !label) {
-      notifications.show({ color: 'orange', message: 'Veuillez remplir tous les champs.' });
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      if (editingHoliday) {
-        await updateHoliday(editingHoliday.id, { date, label });
-        notifications.show({ color: 'green', message: 'Jour férié mis à jour.' });
+      if (editing?.id) {
+        await updateHoliday(editing.id, { date, label });
+        notifySuccess('Jour férié mis à jour.');
       } else {
         await createHoliday({ date, label });
-        notifications.show({ color: 'green', message: 'Jour férié créé.' });
+        notifySuccess('Jour férié créé.');
       }
-      setModalOpen(false);
-      await fetchHolidays();
+      setEditing(null);
+      await reload();
     } catch (err) {
-      console.error(err);
-      const msg = err.response?.data?.error || err.message || 'Une erreur est survenue.';
-      notifications.show({
-        color: 'red',
-        title: 'Erreur',
-        message: msg,
-      });
-    } finally {
-      setSubmitting(false);
+      notifyError('Erreur', err);
     }
-  };
-
-  const handleOpenDeleteConfirm = (holiday) => {
-    setHolidayToDelete(holiday);
-    setDeleteConfirmOpen(true);
   };
 
   const handleDelete = async () => {
-    if (!holidayToDelete) return;
     setDeleting(true);
     try {
-      await deleteHoliday(holidayToDelete.id);
-      notifications.show({ color: 'green', message: 'Jour férié supprimé.' });
-      setDeleteConfirmOpen(false);
-      await fetchHolidays();
+      await deleteHoliday(toDelete.id);
+      notifySuccess('Jour férié supprimé.');
+      setToDelete(null);
+      await reload();
     } catch (err) {
-      console.error(err);
-      notifications.show({
-        color: 'red',
-        title: 'Erreur de suppression',
-        message: err.message || 'Une erreur est survenue.',
-      });
+      notifyError('Erreur de suppression', err);
     } finally {
       setDeleting(false);
     }
   };
 
-  if (loading && holidays.length === 0) {
-    return (
-      <Center style={{ height: '70vh' }}>
-        <Loader size="xl" />
-      </Center>
-    );
-  }
+  if (loading) return <LoadingScreen />;
 
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="center">
         <div>
           <Title order={2} mb="xs">Gestion des jours fériés</Title>
-          <Text c="dimmed">
-            Configurez les jours fériés de l'entreprise
-          </Text>
+          <Text c="dimmed">Configurez les jours fériés de l'entreprise</Text>
         </div>
-        <Button onClick={handleOpenCreateModal} color="blue">
+        <Button onClick={() => setEditing({})} color="blue">
           Ajouter un jour férié
         </Button>
       </Group>
@@ -162,105 +93,110 @@ export default function Holidays() {
             Aucun jour férié configuré pour le moment.
           </Text>
         ) : (
-          <Table striped highlightOnHover verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={{ width: '150px' }}>Date</Table.Th>
-                <Table.Th>Libellé</Table.Th>
-                <Table.Th style={{ width: '200px', textAlign: 'right' }}>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {holidays.map((h) => (
-                <Table.Tr key={h.id}>
-                  <Table.Td fw={500}>{formatDate(h.date)}</Table.Td>
-                  <Table.Td>{h.label}</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>
-                    <Group gap="xs" justify="flex-end">
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="blue"
-                        onClick={() => handleOpenEditModal(h)}
-                      >
-                        Modifier
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="red"
-                        onClick={() => handleOpenDeleteConfirm(h)}
-                      >
-                        Supprimer
-                      </Button>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <HolidayTable holidays={holidays} onEdit={setEditing} onDelete={setToDelete} />
         )}
       </Card>
 
-      {/* Modal de création / modification */}
-      <Modal
-        opened={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editingHoliday ? 'Modifier le jour férié' : 'Ajouter un jour férié'}
-        size="sm"
-      >
-        <form onSubmit={handleSubmit}>
-          <Stack gap="md">
-            <TextInput
-              label="Date"
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.currentTarget.value)}
-            />
+      {editing !== null && (
+        <HolidayFormModal holiday={editing} onClose={() => setEditing(null)} onSave={handleSave} />
+      )}
 
-            <TextInput
-              label="Libellé"
-              placeholder="Ex: Lundi de Pâques"
-              required
-              value={label}
-              onChange={(e) => setLabel(e.currentTarget.value)}
-            />
-
-            <Group justify="flex-end" mt="md">
-              <Button variant="light" color="gray" onClick={() => setModalOpen(false)}>
-                Annuler
-              </Button>
-              <Button type="submit" loading={submitting}>
-                {editingHoliday ? 'Mettre à jour' : 'Ajouter'}
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
-
-      {/* Modal de confirmation de suppression */}
-      <Modal
-        opened={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
+      <ConfirmModal
+        opened={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={handleDelete}
         title="Confirmer la suppression"
-        size="sm"
+        confirmLabel="Oui, supprimer"
+        loading={deleting}
       >
-        <Stack>
-          <Text size="sm">
-            Voulez-vous vraiment supprimer le jour férié{' '}
-            <strong>{holidayToDelete?.label}</strong> ({holidayToDelete && formatDate(holidayToDelete.date)}) ?
-          </Text>
+        Voulez-vous vraiment supprimer le jour férié{' '}
+        <strong>{toDelete?.label}</strong> ({toDelete && formatDate(toDelete.date)}) ?
+      </ConfirmModal>
+    </Stack>
+  );
+}
+
+/** Tableau des jours fériés avec actions Modifier / Supprimer. */
+function HolidayTable({ holidays, onEdit, onDelete }) {
+  return (
+    <Table striped highlightOnHover verticalSpacing="sm">
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th style={{ width: '150px' }}>Date</Table.Th>
+          <Table.Th>Libellé</Table.Th>
+          <Table.Th style={{ width: '200px', textAlign: 'right' }}>Actions</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {holidays.map((h) => (
+          <Table.Tr key={h.id}>
+            <Table.Td fw={500}>{formatDate(h.date)}</Table.Td>
+            <Table.Td>{h.label}</Table.Td>
+            <Table.Td style={{ textAlign: 'right' }}>
+              <Group gap="xs" justify="flex-end">
+                <Button size="xs" variant="subtle" color="blue" onClick={() => onEdit(h)}>
+                  Modifier
+                </Button>
+                <Button size="xs" variant="subtle" color="red" onClick={() => onDelete(h)}>
+                  Supprimer
+                </Button>
+              </Group>
+            </Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+/** Formulaire de création / modification d'un jour férié. */
+function HolidayFormModal({ holiday, onClose, onSave }) {
+  const isEdit = Boolean(holiday.id);
+  const [date, setDate] = useState(holiday.date || '');
+  const [label, setLabel] = useState(holiday.label || '');
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!date || !label) {
+      notifyWarning('Veuillez remplir tous les champs.');
+      return;
+    }
+    setSubmitting(true);
+    await onSave({ date, label });
+    setSubmitting(false);
+  };
+
+  return (
+    <Modal opened onClose={onClose} title={isEdit ? 'Modifier le jour férié' : 'Ajouter un jour férié'} size="sm">
+      <form onSubmit={submit}>
+        <Stack gap="md">
+          <TextInput
+            label="Date"
+            type="date"
+            required
+            value={date}
+            onChange={(e) => setDate(e.currentTarget.value)}
+          />
+
+          <TextInput
+            label="Libellé"
+            placeholder="Ex: Lundi de Pâques"
+            required
+            value={label}
+            onChange={(e) => setLabel(e.currentTarget.value)}
+          />
+
           <Group justify="flex-end" mt="md">
-            <Button variant="light" color="gray" onClick={() => setDeleteConfirmOpen(false)}>
+            <Button variant="light" color="gray" onClick={onClose}>
               Annuler
             </Button>
-            <Button color="red" onClick={handleDelete} loading={deleting}>
-              Oui, supprimer
+            <Button type="submit" loading={submitting}>
+              {isEdit ? 'Mettre à jour' : 'Ajouter'}
             </Button>
           </Group>
         </Stack>
-      </Modal>
-    </Stack>
+      </form>
+    </Modal>
   );
 }
