@@ -181,6 +181,7 @@ Nom de fichier image = `ref_employe` (`1.png` → employé réf 1).
 | 2.a | Page générer le salaire de plusieurs salariés (avec filtres poste/genre/heures) | ✅ **FAIT & vérifié** (génération par lot dans le Frontoffice) |
 | 2.a+ | Générer des salaires au tarif journalier (exclut weekends et jours fériés SQLite) | ✅ **FAIT & vérifié** (page `SalaryPerDayBatchCreate` avec détection et découpage des conflits d'intervalles) |
 | 2.b | Page liste salariés sans filtre + Fiche détaillée (salarié, historique salaires/paiements, reste à payer) | ✅ **FAIT & vérifié** (page de détails historique avec vue master-detail) |
+| 2.c | Page de suivi des salaires matricielle (Période x Salarié) avec liens vers fiches de détails | ✅ **FAIT & vérifié** (page `SalaryTracking` implémentée) |
 
 **Prochaine étape recommandée : Le projet J1 et J2 est entièrement finalisé et prêt pour la revue / évaluation.**
 

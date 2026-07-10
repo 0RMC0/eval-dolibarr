@@ -11,6 +11,7 @@ const LINKS = [
   { to: '/paiements/lot', label: 'Générer paiements' },
   { to: '/paiements/resultat', label: 'Résultat des paiements' },
   { to: '/salaries/details', label: 'Détails & Historique' },
+  { to: '/salaries/tracking', label: 'Suivi salaires' },
 ];
 
 export default function FrontofficeLayout() {

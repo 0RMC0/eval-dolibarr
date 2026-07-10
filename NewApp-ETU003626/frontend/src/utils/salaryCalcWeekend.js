@@ -38,26 +38,27 @@ export function dayMultiplier(date, isHoliday, weekend) {
   // ─── ALTERNATIVE 1 (prête à décommenter) ────────────────────────────────
   // Ne PAS payer les jours de week-end dont la case n'est pas cochée.
   // Par défaut (ci-dessous), ces jours sont payés au tarif NORMAL (x1).
-  // if ((isSaturday && !weekend.saturday) || (isSunday && !weekend.sunday)) {
-  //   return 0;
-  // }
+  if ((isSaturday && !weekend.saturday) || (isSunday && !weekend.sunday)) {
+    return 0;
+  }
   // ────────────────────────────────────────────────────────────────────────
 
   // Défaut : MULTIPLICATIF → week-end majoré (x3) PUIS férié (x2) = x6.
-  let mult = 1;
-  if (weekendBoost) mult *= 3;
-  if (isHoliday) mult *= 2;
-  return mult;
+  // let mult = 1;
+  // if (weekendBoost) mult *= 3;
+  // if (isHoliday) mult *= 2;
+  // return mult;
 
   // ─── ALTERNATIVE 2 (prête à décommenter) ────────────────────────────────
   // ADDITION au lieu de multiplication : week-end (x3) + férié (x2) = x5.
   // Remplacer les 4 lignes ci-dessus (let mult ... return mult) par :
-  // let mult;
-  // if (weekendBoost && isHoliday) mult = 5; // 3 + 2 au lieu de 3 × 2
-  // else if (weekendBoost) mult = 3;
-  // else if (isHoliday) mult = 2;
-  // else mult = 1;
-  // return mult;
+  // Changement en x3 prends le dessus sur x2
+  let mult;
+  if (weekendBoost && isHoliday) mult = 3; 
+  else if (weekendBoost) mult = 3;
+  else if (isHoliday) mult = 2;
+  else mult = 1;
+  return mult;
   // ────────────────────────────────────────────────────────────────────────
 }
 
