@@ -7,10 +7,8 @@ import { parseMonth, dayIso, unpaidIntervals } from './salaryCalc';
  *  - jour normal en semaine ............................. x1
  *  - jour férié (semaine) ............................... x2
  *  - samedi/dimanche COCHÉ (majoration) ................. x3
- *  - samedi/dimanche COCHÉ + férié ...................... x6  (x3 puis x2)
- *  - samedi/dimanche NON coché .......................... x1  (payé normalement)
- *
- * Deux alternatives sont fournies plus bas, prêtes à décommenter (voir dayMultiplier).
+ *  - samedi/dimanche COCHÉ + férié ...................... x3  (le tarif week-end prend le dessus)
+ *  - samedi/dimanche NON coché .......................... 0x  (non payé)
  *
  * `weekend` = { saturday: bool, sunday: bool } (cases à cocher de la page).
  */
